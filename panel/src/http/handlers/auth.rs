@@ -1,19 +1,19 @@
 use axum::{
-    extract::{State, Path, Form, ConnectInfo},
+    extract::{State, Path, Form},
     http::{StatusCode},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
-use crate::{state::AppState, models::{Node, User}, http::handlers::HtmlTemplate};
+use crate::{state::AppState, http::handlers::HtmlTemplate, services::auth::verify_password};
 use askama::Template;
-use bcrypt::verify;
 use chrono::{Utc, Duration};
 use rand::Rng;
 use serde::Deserialize;
 use uuid::Uuid;
-use std::net::SocketAddr;
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Set, IntoActiveModel, ActiveValue};
+use crate::entities::{users, sessions, nodes};
 
 pub fn auth_routes() -> Router<AppState> {
     Router::new()
@@ -49,12 +49,12 @@ pub async fn login_page(State(state): State<AppState>) -> impl IntoResponse {
 pub async fn login_handler(
     State(state): State<AppState>,
     jar: CookieJar,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Form(payload): Form<LoginRequest>,
 ) -> Response {
-    let user_opt = sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1")
-        .bind(&payload.email)
-        .fetch_optional(&state.db)
+    // SeaORM find user
+    let user_opt: Option<users::Model> = users::Entity::find()
+        .filter(users::Column::Email.eq(&payload.email))
+        .one(&state.db)
         .await
         .unwrap_or(None);
 
@@ -62,23 +62,18 @@ pub async fn login_handler(
     let panel_font_url = state.panel_font_url.read().await.clone();
 
     if let Some(user) = user_opt {
-        // Allow passwordless login if from localhost
-        let is_localhost = addr.ip().is_loopback();
-        
-        if is_localhost || verify(&payload.password, &user.password_hash).unwrap_or(false) {
+        if verify_password(&payload.password, &user.password_hash) {
             // Create session
             let session_id = Uuid::new_v4();
-            let expires_at_chrono = Utc::now() + Duration::days(7); // chrono duration
+            let expires_at = Utc::now() + Duration::days(7);
             
-            // Store session in DB
-            let res = sqlx::query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)")
-                .bind(session_id)
-                .bind(user.id)
-                .bind(expires_at_chrono)
-                .execute(&state.db)
-                .await;
+            let new_session = sessions::ActiveModel {
+                id: ActiveValue::Set(session_id),
+                user_id: ActiveValue::Set(user.id),
+                expires_at: ActiveValue::Set(expires_at),
+            };
 
-            if res.is_ok() {
+            if new_session.insert(&state.db).await.is_ok() {
                 let cookie = Cookie::build(("session_id", session_id.to_string()))
                     .path("/")
                     .http_only(true)
@@ -99,11 +94,10 @@ pub async fn login_handler(
 
 pub async fn logout_handler(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     if let Some(session_cookie) = jar.get("session_id") {
-         // Delete from DB
-         if let Ok(session_uuid) = Uuid::parse_str(session_cookie.value()) {
-            let _ = sqlx::query("DELETE FROM sessions WHERE id = $1")
-                .bind(session_uuid)
-                .execute(&state.db)
+         let session_str = session_cookie.value();
+         if let Ok(sess_uuid) = Uuid::parse_str(session_str) {
+             let _ = sessions::Entity::delete_by_id(sess_uuid)
+                .exec(&state.db)
                 .await;
          }
     }
@@ -115,24 +109,27 @@ pub async fn rotate_token_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> StatusCode {
-    let node_opt = sqlx::query_as::<_, Node>("SELECT id, name, ip, port, token FROM nodes WHERE id = $1::uuid")
-        .bind(&id)
-        .fetch_optional(&state.db)
+    let uid = match Uuid::parse_str(&id) {
+        Ok(u) => u,
+        Err(_) => return StatusCode::NOT_FOUND,
+    };
+
+    let node_opt = nodes::Entity::find_by_id(uid)
+        .one(&state.db)
         .await
         .unwrap_or(None);
 
     if let Some(node) = node_opt {
+        // use rand::Rng; // Already imported
         let new_token: String = rand::rng()
-            .sample_iter(&rand::distr::Alphanumeric)
+            .sample_iter(&rand::distr::Alphanumeric) 
             .take(32)
             .map(char::from)
             .collect();
 
-        if let Some(manager) = &state.redis {
-            let mut con = manager.clone();
-            let key = format!("node:{}:pending_token", id);
-            let _: Result<(), _> = redis::AsyncCommands::set_ex(&mut con, key, &new_token, 60).await;
-        }
+        // Use Cache Service
+        let key = format!("node:{}:pending_token", id);
+        state.cache.set(&key, &new_token, 60).await;
 
         let url = format!("http://{}:{}/update-token", node.ip, node.port);
         let payload = serde_json::json!({ "token": new_token });
@@ -145,11 +142,9 @@ pub async fn rotate_token_handler(
 
         match resp {
             Ok(res) if res.status().is_success() => {
-                let _ = sqlx::query("UPDATE nodes SET token = $1 WHERE id = $2::uuid")
-                    .bind(&new_token)
-                    .bind(&id)
-                    .execute(&state.db)
-                    .await;
+                let mut active: nodes::ActiveModel = node.clone().into_active_model();
+                active.token = Set(new_token);
+                let _ = active.update(&state.db).await;
                 
                 return StatusCode::OK;
             }
@@ -173,17 +168,22 @@ pub async fn auth_middleware(
     let session_cookie = jar.get("session_id");
     if let Some(cookie) = session_cookie {
         if let Ok(session_id) = Uuid::parse_str(cookie.value()) {
-             let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id = $1 AND expires_at > NOW()")
-                .bind(session_id)
-                .fetch_one(&state.db)
+            let sess = sessions::Entity::find_by_id(session_id)
+                .one(&state.db)
                 .await
-                .unwrap_or(0);
-            
-            if count > 0 {
-                return Ok(next.run(request).await);
+                .unwrap_or(None);
+                
+            if let Some(s) = sess {
+                 if s.expires_at > chrono::Utc::now() {
+                     return Ok(next.run(request).await);
+                 }
             }
         }
     }
+    
+    // Check if path is safely ignorable?
+    // Handlers logic in main.rs applies middleware ONLY to protected routes.
+    // If we are here, we FAILED validation.
     
     Err(Redirect::to("/auth/login"))
 }

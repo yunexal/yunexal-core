@@ -2,7 +2,9 @@ use axum::{
     extract::{State, Path},
     http::HeaderMap,
 };
-use crate::{state::AppState, models::Node};
+use crate::{state::AppState};
+use sea_orm::{EntityTrait};
+use crate::entities::nodes;
 
 const LOGO: &str = r#"
 ............................+@@@#+:..............................+%@@@@*............................
@@ -39,11 +41,11 @@ pub async fn install_script_handler(
 ) -> String {
     let host = headers.get("host").and_then(|h| h.to_str().ok()).unwrap_or("127.0.0.1:3000");
 
-    // Fetch node to get configured port and token
-    let node_result = sqlx::query_as::<_, Node>("SELECT id::text, name, ip, port, token FROM nodes WHERE id = $1::uuid")
-        .bind(&id)
-        .fetch_optional(&state.db)
-        .await;
+    let node_result = if let Ok(uid) = uuid::Uuid::parse_str(&id) {
+         nodes::Entity::find_by_id(uid).one(&state.db).await
+    } else {
+         Ok(None)
+    };
     
     let (port, token) = match node_result {
         Ok(Some(n)) => (n.port, n.token),
@@ -80,7 +82,7 @@ EOF
 
 # 4. Download and run the node agent
 echo "Downloading Node Agent..."
-curl -L -o yunexal-node http://{}/downloads/yunexal-node
+curl -L -o yunexal-node "http://{}/downloads/yunexal-node?token={}"
 chmod +x yunexal-node
 
 # 5. Create systemd service
@@ -107,7 +109,7 @@ systemctl enable yunexal-node
 systemctl restart yunexal-node
 
 echo "Node installed and started!"
-"#, LOGO, token, id, host, port, host)
+"#, LOGO, token, id, host, port, host, token)
 }
 
 pub async fn uninstall_script_handler(

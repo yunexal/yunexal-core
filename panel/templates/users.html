@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+
+{% block title %}Users - {{ panel_name }}{% endblock %}
+
+{% block header %}Users{% endblock %}
+
+{% block header_actions %}
+<a href="/users/new" class="btn btn-primary">Create New User</a>
+{% endblock %}
+
+{% block content %}
+
+{% if users.is_empty() %}
+<div style="text-align: center; padding: 4rem 2rem;">
+    <div style="font-size: 4rem; color: #ddd; margin-bottom: 1rem;">👥</div>
+    <h2 style="color: #333; margin-bottom: 0.5rem;">No Users Found</h2>
+    <p style="color: #666; max-width: 500px; margin: 0 auto 2rem auto;">
+        This shouldn't happen if you are logged in.
+    </p>
+    <a href="/users/new" class="btn btn-primary">Create User</a>
+</div>
+{% else %}
+<div style="background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background: #f8f9fa; border-bottom: 2px solid #e9ecef;">
+                <th style="text-align: left; padding: 1rem; color: #495057;">Username</th>
+                <th style="text-align: left; padding: 1rem; color: #495057;">Email</th>
+                <th style="text-align: left; padding: 1rem; color: #495057;">Role</th>
+                <th style="text-align: right; padding: 1rem; color: #495057;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr style="border-bottom: 1px solid #e9ecef;">
+                <td style="padding: 1rem;">
+                    <div style="font-weight: bold; color: #333;">{{ user.username }}</div>
+                    <div style="font-size: 0.8em; color: #666;">ID: {{ user.id }}</div>
+                </td>
+                <td style="padding: 1rem; color: #444;">{{ user.email }}</td>
+                <td style="padding: 1rem;">
+                    <span style="display:inline-block; padding: 0.25rem 0.5rem; background: #e7f5ff; color: #1971c2; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">{{ user.role }}</span>
+                </td>
+                <td style="padding: 1rem; text-align: right;">
+                    <a href="/users/{{ user.id }}/edit" class="btn btn-sm btn-secondary" style="background: #6c757d; color: white; padding: 0.25rem 0.5rem; text-decoration: none; border-radius: 4px;">Manage</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

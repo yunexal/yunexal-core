@@ -12,16 +12,21 @@ mod models;
 mod state;
 mod handlers;
 mod tasks;
+mod grpc;
+mod services;
 
 use models::NodeConfig;
 use state::NodeState;
 use handlers::{
     auth::{auth_middleware, update_token_handler},
-    docker::{console_handler, create_container, delete_container, list_containers},
+    docker::{console_handler, create_container, delete_container, list_containers, start_container, stop_container, restart_container},
     health::health_check,
     update::self_update_handler,
 };
 use tasks::start_heartbeat_task;
+use grpc::MyNodeService;
+use grpc::node_proto::node_service_server::NodeServiceServer;
+use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
@@ -29,14 +34,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     dotenv::dotenv().ok(); 
 
     println!("Starting Yunexal Node Agent...");
+    println!("Current Working Directory: {:?}", std::env::current_dir().unwrap_or_default());
 
     // Try to load config.yml
-    let config_content = fs::read_to_string("config.yml").unwrap_or_default();
-    let config: Option<NodeConfig> = serde_yaml::from_str(&config_content).ok();
+    let config_path = "config.yml";
+    let config = match fs::read_to_string(config_path) {
+        Ok(content) => {
+             println!("Found config.yml, parsing...");
+             match serde_yaml::from_str::<NodeConfig>(&content) {
+                 Ok(cfg) => Some(cfg),
+                 Err(e) => {
+                     eprintln!("Failed to parse config.yml: {}", e);
+                     eprintln!("Content was: \n{}", content);
+                     None
+                 }
+             }
+        },
+        Err(e) => {
+            println!("config.yml not found or unreadable: {}", e);
+            None
+        }
+    };
 
     let (token, node_id, panel_url, port, ram_limit, disk_limit) = if let Some(mut cfg) = config {
         println!("Loaded configuration from config.yml");
         
+        // ... (existing auto-config code)
         let mut sys = sysinfo::System::new_all();
         sys.refresh_all();
         
@@ -48,7 +71,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         }
 
         // Auto-configure Disk Limit (95%)
-        // Note: sysinfo disk usage is usually per disk, we'll take the disk where current executable resides or root
         if cfg.disk_limit == 0 {
             let disks = sysinfo::Disks::new_with_refreshed_list();
             // Simple heuristic: Find largest available space or root
@@ -59,7 +81,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
                      break;
                  }
             }
-             // Fallback if / not found
             if total_space_mb == 0 && !disks.is_empty() {
                 total_space_mb = disks[0].total_space() / 1024 / 1024;
             }
@@ -70,12 +91,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
         (cfg.token, cfg.node_id, cfg.panel_url, cfg.port, cfg.ram_limit, cfg.disk_limit)
     } else {
-        println!("config.yml not found or invalid, falling back to environment variables");
-        let token = std::env::var("APP_KEY").expect("APP_KEY environment variable must be set");
-        let node_id = std::env::var("NODE_ID").unwrap_or_else(|_| "unknown".to_string());
-        let panel_url = std::env::var("PANEL_URL").unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
-        let port = std::env::var("PORT").unwrap_or("3001".to_string()).parse().unwrap_or(3001);
-        (token, node_id, panel_url, port, 0, 0)
+        println!("ERROR: config.yml not loaded and fallback ENV vars are missing.");
+        println!("Please ensure config.yml exists in {:?} and is valid YAML.", std::env::current_dir().unwrap_or_default());
+        // Force exit with specific error to avoid panic 101
+        std::process::exit(1); 
     };
 
     println!("Node ID: {}", node_id);
@@ -104,8 +123,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         .route("/health", get(health_check))
         .route("/containers", get(list_containers))
         .route("/containers", post(create_container))
-        .route("/containers/:uuid", delete(delete_container))
-        .route("/containers/:uuid/console", get(console_handler))
+        .route("/containers/{uuid}", delete(delete_container))
+        .route("/containers/{uuid}/start", post(start_container))
+        .route("/containers/{uuid}/stop", post(stop_container))
+        .route("/containers/{uuid}/restart", post(restart_container))
+        .route("/containers/{uuid}/console", get(console_handler))
         .route("/update-token", post(update_token_handler))
         .route("/self-update", post(self_update_handler))
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
@@ -117,7 +139,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     // Start heartbeat task
-    tokio::spawn(start_heartbeat_task(state));
+    tokio::spawn(start_heartbeat_task(state.clone()));
+
+    // Start gRPC Server
+    let grpc_port = port + 1;
+    let grpc_addr = format!("0.0.0.0:{}", grpc_port).parse().unwrap();
+    let node_service = MyNodeService { docker: state.docker.clone() };
+
+    tokio::spawn(async move {
+        println!("gRPC Server listening on {}", grpc_addr);
+        Server::builder()
+            .add_service(NodeServiceServer::new(node_service))
+            .serve(grpc_addr)
+            .await
+            .expect("gRPC server failed");
+    });
 
     axum::serve(listener, app).await.unwrap();
 

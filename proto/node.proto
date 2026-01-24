@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package node;
+
+service NodeService {
+    // Container Management
+    rpc InstallContainer (InstallServerRequest) returns (stream InstallResponse);
+    rpc DeleteContainer (ServerIdRequest) returns (ActionResponse);
+    rpc ReinstallContainer (InstallServerRequest) returns (stream InstallResponse);
+
+    // Power Actions
+    rpc StartContainer (ServerIdRequest) returns (ActionResponse);
+    rpc StopContainer (ServerIdRequest) returns (ActionResponse);
+    rpc RestartContainer (ServerIdRequest) returns (ActionResponse);
+    rpc KillContainer (ServerIdRequest) returns (ActionResponse);
+
+    // Console & Stats
+    rpc AttachConsole (stream ConsoleInput) returns (stream ConsoleOutput);
+    rpc GetStats (ServerIdRequest) returns (stream StatsResponse);
+}
+
+message ServerIdRequest {
+    string id = 1;
+}
+
+message InstallServerRequest {
+    string id = 1;
+    string docker_image = 2;
+    string startup_command = 3;
+    // Environment variables
+    map<string, string> env_vars = 4;
+    int32 memory_limit = 5; // In MB
+    int32 cpu_limit = 6; // Percentage or shares
+    int32 disk_limit = 7; // In MB
+}
+
+message InstallResponse {
+    bool success = 1;
+    string log = 2; // Progress log line
+    bool finished = 3;
+}
+
+message ActionResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message ConsoleInput {
+    string id = 1;
+    string command = 2; // Standard input
+}
+
+message ConsoleOutput {
+    string log = 1; // Standard output/error
+}
+
+message StatsResponse {
+    double cpu_usage = 1; // %
+    int64 memory_usage = 2; // bytes
+    int64 memory_limit = 3; // bytes
+    int64 network_rx = 4; // bytes
+    int64 network_tx = 5; // bytes
+    string state = 6; // running, stopped, etc.
+}

@@ -1,6 +1,8 @@
 use crate::http::handlers::HtmlTemplate;
 use crate::models::HeartbeatPayload;
 use crate::state::AppState;
+use crate::entities::users; // Added
+use sea_orm::{EntityTrait, QueryOrder}; // Added
 use askama::Template;
 use axum::{
     extract::{Form, State},
@@ -30,7 +32,7 @@ struct OverviewStatsTemplate {
 struct OverviewTemplate {
     panel_name: String,
     panel_font: String,
-    panel_font_url: String, // Added
+    panel_font_url: String,
     panel_version: String,
     total_nodes: usize,
     online_nodes: usize,
@@ -45,6 +47,7 @@ struct OverviewTemplate {
     net_tx_speed: u64,
     execution_time: f64,
     active_tab: String,
+    users: Vec<users::Model>, // Added
 }
 
 #[derive(Deserialize)]
@@ -88,23 +91,11 @@ async fn calculate_overview_stats(state: &AppState) -> CalculatedStats {
     for node in &nodes {
         let mut stats: Option<HeartbeatPayload> = None;
 
-        // 1. Try Redis
-        if let Some(manager) = &state.redis {
-            let mut con = manager.clone();
-            let key = format!("node:{}:stats", node.id);
-            let cached: Result<String, _> = redis::AsyncCommands::get(&mut con, &key).await;
-            if let Ok(json) = cached {
-                if let Ok(payload) = serde_json::from_str::<HeartbeatPayload>(&json) {
-                    stats = Some(payload);
-                }
-            }
-        }
-
-        // 2. Try Memory (if not in Redis)
-        if stats.is_none() {
-            let lock = state.heartbeats_cache.read().await;
-            if let Some(payload) = lock.get(&node.id) {
-                stats = Some(payload.clone());
+        // Try Cache (Redis -> RAM fallback)
+        let key = format!("node:{}:stats", node.id);
+        if let Some(json) = state.cache.get(&key).await {
+            if let Ok(payload) = serde_json::from_str::<HeartbeatPayload>(&json) {
+                stats = Some(payload);
             }
         }
 
@@ -169,7 +160,14 @@ pub async fn overview_handler(State(state): State<AppState>) -> impl IntoRespons
     let panel_version = env!("CARGO_PKG_VERSION").to_string();
     let panel_name = state.panel_name.read().await.clone();
     let panel_font = state.panel_font.read().await.clone();
-    let panel_font_url = state.panel_font_url.read().await.clone(); // Added
+    let panel_font_url = state.panel_font_url.read().await.clone();
+
+    // Fetch users (Added)
+    let users = users::Entity::find()
+        .order_by_asc(users::Column::Username)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let stats = calculate_overview_stats(&state).await;
 
@@ -179,7 +177,7 @@ pub async fn overview_handler(State(state): State<AppState>) -> impl IntoRespons
     HtmlTemplate(OverviewTemplate {
         panel_name,
         panel_font,
-        panel_font_url, // Added
+        panel_font_url,
         panel_version,
         total_nodes: stats.total_nodes,
         online_nodes: stats.online_nodes,
@@ -194,6 +192,7 @@ pub async fn overview_handler(State(state): State<AppState>) -> impl IntoRespons
         net_tx_speed: stats.net_tx_speed,
         execution_time,
         active_tab: "overview".to_string(),
+        users, // Added
     })
 }
 

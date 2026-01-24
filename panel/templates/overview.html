@@ -75,9 +75,9 @@
             style="padding: 10px 15px; text-decoration: none; color: #007bff; border: 1px solid transparent; border-bottom-color: transparent; border-top-left-radius: 0.25rem; border-top-right-radius: 0.25rem; margin-right: 2px; cursor: pointer;">Users</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link" id="wireguard-tab" href="#wireguard" onclick="openTab(event, 'wireguard')"
+        <a class="nav-link" id="cloudflare-tab" href="#cloudflare" onclick="openTab(event, 'cloudflare')"
             style="padding: 10px 15px; text-decoration: none; color: #007bff; border: 1px solid transparent; border-bottom-color: transparent; border-top-left-radius: 0.25rem; border-top-right-radius: 0.25rem; margin-right: 2px; cursor: pointer;">
-            WireGuard
+            Cloudflare
             <span
                 style="font-size: 0.6em; background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 10px; font-weight: bold; vertical-align: middle;">SOON</span>
         </a>
@@ -238,24 +238,62 @@
 <!-- Users Tab -->
 <div id="users" class="tab-content" style="display: none;">
     <div class="section-card">
-        <h3>User Management</h3>
-        <p style="color: #666;">User management feature is coming soon.</p>
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; text-align: center;">
-            <p>Admin (You) - <span class="badge badge-success"
-                    style="background: #28a745; color: white; padding: 2px 6px; border-radius: 4px;">Active</span></p>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3>User Management</h3>
+            <a href="/users/new" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9em;">Create New User</a>
         </div>
+        
+        {% if users.is_empty() %}
+            <div style="text-align: center; padding: 2rem;">
+                <p style="color: #666;">No users found.</p>
+            </div>
+        {% else %}
+            <div style="background: white; border-radius: 8px; overflow: hidden; border: 1px solid #e9ecef;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa; border-bottom: 1px solid #e9ecef;">
+                            <th style="text-align: left; padding: 1rem; color: #495057;">Username</th>
+                            <th style="text-align: left; padding: 1rem; color: #495057;">Email</th>
+                            <th style="text-align: left; padding: 1rem; color: #495057;">Role</th>
+                            <th style="text-align: right; padding: 1rem; color: #495057;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr style="border-bottom: 1px solid #e9ecef;">
+                            <td style="padding: 1rem;">
+                                <div style="font-weight: 500; color: #333;">{{ user.username }}</div>
+                                <div style="font-size: 0.8em; color: #666;">{{ user.id }}</div>
+                            </td>
+                            <td style="padding: 1rem; color: #444;">{{ user.email }}</td>
+                            <td style="padding: 1rem;">
+                                {% if user.role == "admin" %}
+                                <span style="display:inline-block; padding: 0.25rem 0.5rem; background: #d4edda; color: #155724; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">Admin</span>
+                                {% else %}
+                                <span style="display:inline-block; padding: 0.25rem 0.5rem; background: #e2e3e5; color: #383d41; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">User</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding: 1rem; text-align: right;">
+                                <a href="/users/{{ user.id }}/edit" class="btn btn-sm btn-secondary" style="background: #6c757d; color: white; padding: 0.25rem 0.5rem; text-decoration: none; border-radius: 4px; font-size: 0.9em;">Manage</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
     </div>
 </div>
 
-<!-- WireGuard Tab -->
-<div id="wireguard" class="tab-content" style="display: none;">
+<!-- Cloudflare Tab -->
+<div id="cloudflare" class="tab-content" style="display: none;">
     <div class="section-card" style="text-align: center; padding: 4rem 2rem;">
-        <div style="font-size: 4rem; color: #ddd; margin-bottom: 1rem;">🔒</div>
-        <h2 style="color: #333; margin-bottom: 0.5rem;">WireGuard Integration</h2>
+        <div style="font-size: 4rem; color: #f38020; margin-bottom: 1rem;">☁️</div>
+        <h2 style="color: #333; margin-bottom: 0.5rem;">Cloudflare Integration</h2>
         <p style="color: #666; max-width: 500px; margin: 0 auto 2rem auto;">
-            Secure networking for your cluster is coming soon.
+            Secure networking with Cloudflare Tunnels is coming soon.
             <br>
-            You will be able to manage VPN tunnels directly from the panel.
+            You will be able to manage tunnels directly from the panel.
         </p>
         <div
             style="display: inline-block; background: #e9ecef; color: #495057; padding: 8px 16px; border-radius: 20px; font-weight: 500; font-size: 0.9em;">

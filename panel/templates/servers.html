@@ -65,10 +65,8 @@
                     <span style="color: #666;">Alloc: {% if let Some(aid) = server.allocation_id %}{{ aid }}{% else %}None{% endif %}</span>
                 </td>
                 <td style="padding: 1rem;">
-                    <span class="badge {% if server.status == " running" %}badge-success{% else %}badge-warning{% endif
-                        %}" style="padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; 
-                                         {% if server.status == " running" %}background: #d4edda; color: #155724;{%
-                        else %}background: #fff3cd; color: #856404;{% endif %}">
+                    <span class="badge {% if server.status == "running" %}badge-success{% else %}{% if server.status == "install_failed" %}badge-danger{% else %}badge-warning{% endif %}{% endif %}" style="padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; 
+                                         {% if server.status == "running" %}background: #d4edda; color: #155724;{% else %}{% if server.status == "install_failed" %}background: #f8d7da; color: #721c24;{% else %}background: #fff3cd; color: #856404;{% endif %}{% endif %}">
                         {{ server.status }}
                     </span>
                 </td>

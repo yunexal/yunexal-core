@@ -1,4 +1,9 @@
-use bcrypt::{hash, DEFAULT_COST};
+// FIX: Import the proper module path when running as a bin separate from lib.
+// However, since `panel` is a lib allowing binary targets, we can import from `panel`.
+// Or we have to copy-paste argon implementation here if we can't link main lib code in bin easily.
+// Let's assume we can use `panel::services::auth`.
+
+use panel::services::auth::hash_password;
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 use chrono::Utc;
@@ -19,13 +24,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let username = env::var("ADMIN_USERNAME")
         .unwrap_or_else(|_| "admin".to_string());
     let email = env::var("ADMIN_EMAIL")
-        .unwrap_or_else(|_| "admin@mail.com".to_string());
+        .unwrap_or_else(|_| "admin@example.com".to_string());
     let password = env::var("ADMIN_PASSWORD")
         .unwrap_or_else(|_| "qwerty123456".to_string());
 
     println!("Creating user '{}' with email '{}'...", username, email);
 
-    let hashed_password = hash(&password, DEFAULT_COST)?;
+    let hashed_password = hash_password(&password).expect("Hashing failed");
     let user_id = Uuid::new_v4();
     let created_at = Utc::now();
     let role = "admin";

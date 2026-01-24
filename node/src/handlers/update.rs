@@ -14,13 +14,14 @@ pub async fn self_update_handler(
     State(state): State<NodeState>,
 ) -> impl IntoResponse {
     let panel_url = state.panel_url.clone();
+    let token = state.token.read().await.clone();
     
     // Spawn the update process in the background so we can return a response immediately
     tokio::spawn(async move {
         println!("Starting background update process...");
         tokio::time::sleep(Duration::from_secs(1)).await; // Give time for response to flush
 
-        if let Err(e) = perform_update(&panel_url).await {
+        if let Err(e) = perform_update(&panel_url, &token).await {
             eprintln!("Update failed: {}", e);
         } else {
             println!("Update successful. Restarting...");
@@ -34,12 +35,12 @@ pub async fn self_update_handler(
     }))
 }
 
-async fn perform_update(panel_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn perform_update(panel_url: &str, token: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Construct download URL. 
     // Ensure panel_url does not have trailing slash to avoid double slash, 
     // though most browsers/libs handle it.
     let base_url = panel_url.trim_end_matches('/');
-    let url = format!("{}/downloads/yunexal-node", base_url);
+    let url = format!("{}/downloads/yunexal-node?token={}", base_url, token);
     
     println!("Downloading update from: {}", url);
 

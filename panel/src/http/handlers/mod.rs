@@ -8,6 +8,7 @@ pub mod logs;
 pub mod overview;
 pub mod servers;
 pub mod runtimes;
+pub mod users;
 
 use axum::response::{Html, IntoResponse, Response};
 use askama::Template;

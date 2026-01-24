@@ -80,8 +80,9 @@
             <a href="/" class="{% if active_tab == " overview" %}active{% endif %}">Overview</a>
             <a href="/nodes" class="{% if active_tab == " nodes" %}active{% endif %}">Nodes</a>
             <a href="/runtimes" class="{% if active_tab == " runtimes" %}active{% endif %}">Runtimes</a>
-            <a href="/servers" class="{% if active_tab == " servers" %}active{% endif %}">Servers</a>
-            <a href="/logs" class="{% if active_tab == " logs" %}active{% endif %}">Panel Logs</a>
+            <a href="/servers" class="{% if active_tab == "servers" %}active{% endif %}">Servers</a>
+            <a href="/users" class="{% if active_tab == "users" %}active{% endif %}">Users</a>
+            <a href="/logs" class="{% if active_tab == "logs" %}active{% endif %}">Panel Logs</a>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <form action="/auth/logout" method="POST">
                 <button type="submit" style="width: 100%; text-align: left; background: none; border: none; padding: 10px 15px; color: #666; font-family: inherit; font-size: inherit; cursor: pointer; display: flex; align-items: center; gap: 10px;">

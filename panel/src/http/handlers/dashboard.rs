@@ -65,25 +65,19 @@ pub async fn nodes_page_handler(
 
         let mut payload_opt: Option<HeartbeatPayload> = None;
 
-        // 1. Try Redis
-        if let Some(manager) = &state.redis {
-            let mut con = manager.clone();
-            let key = format!("node:{}:stats", node.id);
-            // info!("[TRACE] Dashboard Querying Key: {}", key);
-            let stats_json: Result<String, _> = redis::AsyncCommands::get(&mut con, &key).await;
-
-            if let Ok(json_str) = stats_json {
-                info!("[TRACE] Redis HIT for {}: {}", node.id, json_str);
-                if let Ok(payload) = serde_json::from_str::<HeartbeatPayload>(&json_str) {
-                    payload_opt = Some(payload);
-                }
+        // 1. Try Cache Service (Redis/RAM L2)
+        let stats_key = format!("node:{}:stats", node.id);
+        if let Some(json_str) = state.cache.get(&stats_key).await {
+            info!("[TRACE] Cache HIT for {}: {}", node.id, json_str);
+            if let Ok(payload) = serde_json::from_str::<HeartbeatPayload>(&json_str) {
+                payload_opt = Some(payload);
             }
         }
 
         // 2. Fallback to Memory
         if payload_opt.is_none() {
             let sub_lock = state.heartbeats_cache.read().await;
-            if let Some(payload) = sub_lock.get(&node.id) {
+            if let Some(payload) = sub_lock.get(&node.id.to_string()) {
                 // Check if timestamp is fresh (e.g. < 20 seconds old)
                 let now = chrono::Utc::now().timestamp_millis();
                 if (now - payload.timestamp) < 20000 {
@@ -121,8 +115,8 @@ pub async fn nodes_page_handler(
         }
 
         view_nodes.push(NodeViewModel {
-            id: node.id.clone(),
-            id_short: node.id[..8].to_string(),
+            id: node.id.to_string(),
+            id_short: node.id.to_string()[..8].to_string(),
             name: node.name,
             ip: node.ip,
             port: node.port,

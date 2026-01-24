@@ -11,13 +11,15 @@ use axum::{
 use serde::Deserialize;
 use std::collections::HashSet;
 use uuid::Uuid;
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, ActiveValue, QueryOrder, PaginatorTrait};
+use crate::entities::{nodes, allocations};
 
 #[derive(Template)]
 #[template(path = "node_allocations.html")]
 struct AllocationsTemplate {
     panel_name: String,
     panel_font: String,
-    panel_font_url: String, // Added
+    panel_font_url: String, 
     panel_version: String,
     execution_time: f64,
     active_tab: String,
@@ -45,33 +47,25 @@ pub async fn allocations_page_handler(
 
     let page = params.page.unwrap_or(1);
     let limit = 50;
-    let offset = (page - 1) * limit;
 
-    let node_opt = sqlx::query_as::<_, Node>("SELECT id::text, name, ip, port, token, sftp_port, ram_limit, disk_limit, cpu_limit, version FROM nodes WHERE id = $1::uuid")
-        .bind(&id)
-        .fetch_optional(&state.db)
-        .await
-        .unwrap_or(None);
+    let uid = Uuid::parse_str(&id).unwrap_or(Uuid::default());
+    let node_opt = nodes::Entity::find_by_id(uid).one(&state.db).await.unwrap_or(None);
 
     if node_opt.is_none() {
         return Redirect::to("/nodes").into_response();
     }
     let node = node_opt.unwrap();
 
-    let allocations = sqlx::query_as::<_, Allocation>("SELECT id::text, node_id::text, ip, port, server_id::text FROM allocations WHERE node_id = $1::uuid ORDER BY port ASC LIMIT $2 OFFSET $3")
-        .bind(&id)
-        .bind((limit + 1) as i32) // Fetch one more. Postgres needs i32/i64 not u32.
-        .bind(offset as i32)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default();
-
-    let has_more = allocations.len() > limit as usize;
-    let display_allocations = if has_more {
-        allocations[0..limit as usize].to_vec()
-    } else {
-        allocations
-    };
+    let paginator = allocations::Entity::find()
+        .filter(allocations::Column::NodeId.eq(uid))
+        .order_by_asc(allocations::Column::Port)
+        .paginate(&state.db, limit);
+    
+    let display_allocations = paginator.fetch_page(page as u64 - 1).await.unwrap_or_default();
+    let total_pages = paginator.num_pages().await.unwrap_or(0);
+    // Logic fix: if total_pages is 0 (empty), has_more is false. 
+    // If page < total_pages, implies more.
+    let has_more = (page as u64) < total_pages; 
 
     let elapsed = start_time.elapsed();
     let execution_time = elapsed.as_secs_f64() * 1000.0;
@@ -97,6 +91,7 @@ pub async fn create_allocations_handler(
     Form(payload): Form<CreateAllocationRequest>,
 ) -> Redirect {
     let ports = parse_ports(&payload.ports);
+    let uid = Uuid::parse_str(&id).unwrap_or(Uuid::default());
 
     // Deduplicate
     let unique_ports: HashSet<i32> = ports.into_iter().collect();
@@ -108,13 +103,15 @@ pub async fn create_allocations_handler(
         }
 
         if port >= 0 && port <= 65535 {
-            let _ = sqlx::query("INSERT INTO allocations (id, node_id, ip, port) VALUES ($1::uuid, $2::uuid, $3, $4) ON CONFLICT DO NOTHING")
-                .bind(Uuid::new_v4().to_string())
-                .bind(&id)
-                .bind(&payload.ip)
-                .bind(port)
-                .execute(&state.db)
-                .await;
+             let alloc = allocations::ActiveModel {
+                 id: ActiveValue::Set(Uuid::new_v4()),
+                 node_id: ActiveValue::Set(uid),
+                 ip: ActiveValue::Set(payload.ip.clone()),
+                 port: ActiveValue::Set(port),
+                 server_id: ActiveValue::NotSet, // Null
+             };
+             let _ = alloc.insert(&state.db).await; // ON CONFLICT DO NOTHING behavior?
+             // SeaORM returns Error on duplicate. We just ignore it.
         }
     }
 
@@ -127,24 +124,18 @@ pub async fn delete_allocations_handler(
     Form(payload): Form<DeleteAllocationRequest>,
 ) -> Redirect {
     let ports_to_delete = parse_ports(&payload.ports);
+    let uid = Uuid::parse_str(&id).unwrap_or(Uuid::default());
 
-    if payload.force {
-        for port in ports_to_delete {
-            let _ = sqlx::query("DELETE FROM allocations WHERE node_id = $1::uuid AND port = $2")
-                .bind(&id)
-                .bind(port)
-                .execute(&state.db)
-                .await;
+    for port in ports_to_delete {
+         let mut query = allocations::Entity::delete_many()
+            .filter(allocations::Column::NodeId.eq(uid))
+            .filter(allocations::Column::Port.eq(port));
+        
+        if !payload.force {
+             query = query.filter(allocations::Column::ServerId.is_null());
         }
-    } else {
-        // Safe delete (only if server_id is NULL)
-        for port in ports_to_delete {
-            let _ = sqlx::query("DELETE FROM allocations WHERE node_id = $1::uuid AND port = $2 AND server_id IS NULL")
-                .bind(&id)
-                .bind(port)
-                .execute(&state.db)
-                .await;
-        }
+        
+        let _ = query.exec(&state.db).await;
     }
 
     Redirect::to(&format!("/nodes/{}/allocations", id))

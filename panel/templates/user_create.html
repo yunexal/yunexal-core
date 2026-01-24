@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+
+{% block title %}Create User - {{ panel_name }}{% endblock %}
+
+{% block header %}Create New User{% endblock %}
+
+{% block header_actions %}
+<a href="/users" class="btn btn-secondary" style="background: transparent; color: #495057; border: 1px solid #ced4da;">Cancel</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    {% if let Some(err) = error %}
+    <div style="background: #ffe3e3; color: #c92a2a; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #ffa8a8;">
+        <strong>Error:</strong> {{ err }}
+    </div>
+    {% endif %}
+
+    <form action="/users/new" method="POST" style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Username</label>
+            <input type="text" name="username" required
+                style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem;">
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Email Address</label>
+            <input type="email" name="email" required
+                style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem;">
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Password</label>
+            <input type="password" name="password" required
+                style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem;">
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Role</label>
+            <select name="role" required style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem; background: white;">
+                <option value="user">User</option>
+                <option value="admin">Administrator</option>
+            </select>
+            <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                Administrators have full access to all servers and system settings.
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">Create User</button>
+    </form>
+</div>
+{% endblock %}

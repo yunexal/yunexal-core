@@ -27,10 +27,15 @@
                 Controls
             </div>
             <div style="padding: 0.5rem;">
-                <!-- Placeholder actions -->
-                <button class="btn btn-sm btn-block" style="text-align: left; margin-bottom: 0.5rem; background: #28a745; color: white;">Start</button>
-                <button class="btn btn-sm btn-block" style="text-align: left; margin-bottom: 0.5rem; background: #dc3545; color: white;">Stop</button>
-                <button class="btn btn-sm btn-block" style="text-align: left; margin-bottom: 0.5rem; background: #ffc107; color: black;">Restart</button>
+                <form action="/servers/{{ server.id }}/start" method="POST" style="margin-bottom: 0.5rem;">
+                    <button type="submit" class="btn btn-sm btn-block" style="text-align: left; width: 100%; background: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer;">Start</button>
+                </form>
+                <form action="/servers/{{ server.id }}/stop" method="POST" style="margin-bottom: 0.5rem;">
+                    <button type="submit" class="btn btn-sm btn-block" style="text-align: left; width: 100%; background: #dc3545; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer;">Stop</button>
+                </form>
+                <form action="/servers/{{ server.id }}/restart" method="POST" style="margin-bottom: 0.5rem;">
+                    <button type="submit" class="btn btn-sm btn-block" style="text-align: left; width: 100%; background: #ffc107; color: black; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer;">Restart</button>
+                </form>
             </div>
         </div>
 
@@ -69,7 +74,7 @@
     <!-- Main Content -->
     <div style="display: flex; flex-direction: column; gap: 1.5rem;">
         <!-- Stats / Console -->
-        <div style="background: #1e1e1e; color: #f8f8f2; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); min-height: 400px; padding: 1rem; font-family: monospace;">
+        <div id="terminal-container" style="background: #1e1e1e; color: #f8f8f2; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); min-height: 400px; padding: 1rem; font-family: monospace;">
             <div>> Server console output would go here...</div>
             <div>> connecting to socket...</div>
         </div>

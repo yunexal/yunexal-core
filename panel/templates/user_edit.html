@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+
+{% block title %}Manage User - {{ panel_name }}{% endblock %}
+
+{% block header %}Manage: {{ user.username }}{% endblock %}
+
+{% block header_actions %}
+<a href="/users" class="btn btn-secondary" style="background: transparent; color: #495057; border: 1px solid #ced4da;">Back to List</a>
+{% endblock %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+    <div>
+        {% if let Some(err) = error %}
+        <div style="background: #ffe3e3; color: #c92a2a; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #ffa8a8;">
+            <strong>Error:</strong> {{ err }}
+        </div>
+        {% endif %}
+
+        <form action="/users/{{ user.id }}/edit" method="POST" style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Username</label>
+                <input type="text" name="username" value="{{ user.username }}" required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem;">
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Email Address</label>
+                <input type="email" name="email" value="{{ user.email }}" required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem;">
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Password</label>
+                <input type="password" name="password" placeholder="(Leave blank to keep current)"
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem;">
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; color: #495057; font-weight: 500;">Role</label>
+                <select name="role" required style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 1rem; background: white;">
+                    <option value="user" {% if user.role == "user" %}selected{% endif %}>User</option>
+                    <option value="admin" {% if user.role == "admin" %}selected{% endif %}>Administrator</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem;">Save Changes</button>
+        </form>
+    </div>
+
+    <div>
+        <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 4px solid #fa5252;">
+            <h3 style="color: #c92a2a; margin-top: 0; font-size: 1.25rem;">Danger Zone</h3>
+            <p style="color: #666; margin-bottom: 1.5rem;">
+                Deleting a user will NOT delete their servers, but will remove their access to the panel. This action cannot be undone.
+            </p>
+            <form action="/users/{{ user.id }}/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                <button type="submit" style="background: #fa5252; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; width: 100%; font-weight: 500;">
+                    Delete User
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
